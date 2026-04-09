@@ -2,10 +2,18 @@
 
 namespace App\Services;
 
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 
 class WikipediaClient
 {
+    /**
+     * Wikipedia's API policy requires a descriptive User-Agent on every
+     * request. Requests without one are rejected with HTTP 403.
+     * See https://meta.wikimedia.org/wiki/User-Agent_policy
+     */
+    private const USER_AGENT = 'space-articles-wiki-service/1.0 (+https://github.com/r2rka1/wiki-service) Laravel/Guzzle';
+
     /**
      * Fetch a list of "Space"-related articles from Wikipedia.
      *
@@ -19,7 +27,7 @@ class WikipediaClient
         $base = config('services.wikipedia.base_url');
 
         // 1. discover relevant titles via MediaWiki search
-        $search = Http::timeout(10)
+        $search = $this->client()
             ->get('https://en.wikipedia.org/w/api.php', [
                 'action'   => 'query',
                 'list'     => 'search',
@@ -36,7 +44,7 @@ class WikipediaClient
             if (! $title) {
                 continue;
             }
-            $summary = Http::timeout(10)
+            $summary = $this->client()
                 ->get(rtrim($base, '/') . '/page/summary/' . rawurlencode($title))
                 ->json();
 
@@ -55,5 +63,14 @@ class WikipediaClient
         }
 
         return $articles;
+    }
+
+    private function client(): PendingRequest
+    {
+        return Http::timeout(10)
+            ->withHeaders([
+                'User-Agent' => self::USER_AGENT,
+                'Accept'     => 'application/json',
+            ]);
     }
 }
